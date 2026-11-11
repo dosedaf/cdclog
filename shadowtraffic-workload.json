@@ -1,0 +1,519 @@
+{
+  "generators": [
+    {
+      "name": "seed-customers",
+      "table": "customers",
+      "row": {
+        "id": {
+          "_gen": "sequentialInteger",
+          "startingFrom": 100000
+        },
+        "name": {
+          "_gen": "string",
+          "expr": "#{Name.fullName}"
+        },
+        "email": {
+          "_gen": "string",
+          "expr": "#{Internet.emailAddress}"
+        },
+        "country": {
+          "_gen": "oneOf",
+          "choices": [
+            "US",
+            "DE",
+            "JP",
+            "BR",
+            "IN",
+            "NL",
+            "CA",
+            "AU"
+          ]
+        },
+        "segment": {
+          "_gen": "oneOf",
+          "choices": [
+            "retail",
+            "wholesale",
+            "vip"
+          ]
+        }
+      },
+      "localConfigs": {
+        "maxEvents": 50
+      }
+    },
+    {
+      "name": "seed-products",
+      "table": "products",
+      "row": {
+        "id": {
+          "_gen": "sequentialInteger",
+          "startingFrom": 100000
+        },
+        "sku": {
+          "_gen": "sequentialString",
+          "expr": "SKU-~d"
+        },
+        "name": {
+          "_gen": "oneOf",
+          "choices": [
+            "mechanical keyboard",
+            "usb-c hub",
+            "27\" 4k monitor",
+            "ergo mouse",
+            "laptop stand",
+            "studio mic",
+            "webcam 4k",
+            "desk mat xl",
+            "noise cancelling headphones",
+            "streaming light"
+          ]
+        },
+        "price": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            9.99,
+            499.0
+          ],
+          "decimals": 2
+        },
+        "stock": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            10,
+            200
+          ],
+          "decimals": 0
+        }
+      },
+      "localConfigs": {
+        "maxEvents": 30
+      }
+    },
+    {
+      "name": "seed-orders",
+      "table": "orders",
+      "row": {
+        "id": {
+          "_gen": "sequentialInteger",
+          "startingFrom": 200000
+        },
+        "customer_id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-customers"
+        },
+        "status": "delivered",
+        "total": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            10,
+            500
+          ],
+          "decimals": 2
+        },
+        "updated_at": {
+          "_gen": "now",
+          "serialize": {
+            "type": "postgresTimestamp"
+          }
+        }
+      },
+      "localConfigs": {
+        "maxEvents": 5
+      }
+    },
+    {
+      "name": "orders",
+      "table": "orders",
+      "fork": {
+        "key": {
+          "_gen": "sequentialInteger",
+          "startingFrom": 200005
+        },
+        "maxForks": 12,
+        "stagger": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            0,
+            6000
+          ]
+        },
+        "keepAlive": true
+      },
+      "row": {
+        "id": {
+          "_gen": "var",
+          "var": "forkKey"
+        },
+        "customer_id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-customers"
+        },
+        "status": "created",
+        "total": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            10,
+            500
+          ],
+          "decimals": 2
+        },
+        "updated_at": {
+          "_gen": "now",
+          "serialize": {
+            "type": "postgresTimestamp"
+          }
+        }
+      },
+      "stateMachine": {
+        "_gen": "stateMachine",
+        "initial": "created",
+        "transitions": {
+          "created": "paid",
+          "paid": "shipped",
+          "shipped": {
+            "_gen": "weightedOneOf",
+            "choices": [
+              {
+                "value": "delivered",
+                "weight": 8
+              },
+              {
+                "value": "cancelled",
+                "weight": 2
+              }
+            ]
+          }
+        },
+        "states": {
+          "created": {
+            "row": {}
+          },
+          "paid": {
+            "op": "update",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            },
+            "row": {
+              "status": "paid",
+              "total": {
+                "_gen": "uniformDistribution",
+                "bounds": [
+                  10,
+                  500
+                ],
+                "decimals": 2
+              },
+              "updated_at": {
+                "_gen": "now",
+                "serialize": {
+                  "type": "postgresTimestamp"
+                }
+              }
+            }
+          },
+          "shipped": {
+            "op": "update",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            },
+            "row": {
+              "status": "shipped",
+              "updated_at": {
+                "_gen": "now",
+                "serialize": {
+                  "type": "postgresTimestamp"
+                }
+              }
+            }
+          },
+          "delivered": {
+            "op": "update",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            },
+            "row": {
+              "status": "delivered",
+              "updated_at": {
+                "_gen": "now",
+                "serialize": {
+                  "type": "postgresTimestamp"
+                }
+              }
+            }
+          },
+          "cancelled": {
+            "op": "delete",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            }
+          }
+        }
+      },
+      "localConfigs": {
+        "throttleMs": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            2500,
+            4500
+          ]
+        }
+      }
+    },
+    {
+      "name": "order-items",
+      "table": "order_items",
+      "fork": {
+        "key": {
+          "_gen": "sequentialInteger",
+          "startingFrom": 300000
+        },
+        "maxForks": 6,
+        "stagger": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            0,
+            3000
+          ]
+        },
+        "keepAlive": true
+      },
+      "row": {
+        "id": {
+          "_gen": "var",
+          "var": "forkKey"
+        },
+        "order_id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-orders"
+        },
+        "product_id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-products"
+        },
+        "quantity": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            1,
+            5
+          ],
+          "decimals": 0
+        },
+        "unit_price": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "price"
+          ],
+          "name": "seed-products"
+        }
+      },
+      "stateMachine": {
+        "_gen": "stateMachine",
+        "initial": "inserted",
+        "transitions": {
+          "inserted": {
+            "_gen": "weightedOneOf",
+            "choices": [
+              {
+                "value": "live",
+                "weight": 9
+              },
+              {
+                "value": "removed",
+                "weight": 1
+              }
+            ]
+          },
+          "live": {
+            "_gen": "weightedOneOf",
+            "choices": [
+              {
+                "value": "live",
+                "weight": 9
+              },
+              {
+                "value": "removed",
+                "weight": 1
+              }
+            ]
+          }
+        },
+        "states": {
+          "inserted": {
+            "row": {}
+          },
+          "live": {
+            "op": "update",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            },
+            "row": {
+              "quantity": {
+                "_gen": "uniformDistribution",
+                "bounds": [
+                  1,
+                  5
+                ],
+                "decimals": 0
+              }
+            }
+          },
+          "removed": {
+            "op": "delete",
+            "where": {
+              "id": {
+                "_gen": "var",
+                "var": "forkKey"
+              }
+            }
+          }
+        }
+      },
+      "localConfigs": {
+        "throttleMs": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            1500,
+            3000
+          ]
+        }
+      }
+    },
+    {
+      "name": "product-stock-updates",
+      "table": "products",
+      "op": "update",
+      "where": {
+        "id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-products"
+        }
+      },
+      "row": {
+        "stock": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            0,
+            200
+          ],
+          "decimals": 0
+        }
+      },
+      "localConfigs": {
+        "throttleMs": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            4000,
+            8000
+          ]
+        }
+      }
+    },
+    {
+      "name": "customer-segment-updates",
+      "table": "customers",
+      "op": "update",
+      "where": {
+        "id": {
+          "_gen": "lookup",
+          "path": [
+            "row",
+            "id"
+          ],
+          "name": "seed-customers"
+        }
+      },
+      "row": {
+        "segment": {
+          "_gen": "oneOf",
+          "choices": [
+            "retail",
+            "wholesale",
+            "vip"
+          ]
+        }
+      },
+      "localConfigs": {
+        "throttleMs": {
+          "_gen": "uniformDistribution",
+          "bounds": [
+            5000,
+            9000
+          ]
+        }
+      }
+    }
+  ],
+  "schedule": {
+    "stages": [
+      {
+        "generators": [
+          "seed-customers",
+          "seed-products"
+        ]
+      },
+      {
+        "generators": [
+          "seed-orders"
+        ]
+      },
+      {
+        "generators": [
+          "orders",
+          "order-items",
+          "product-stock-updates",
+          "customer-segment-updates"
+        ]
+      }
+    ]
+  },
+  "connections": {
+    "pg": {
+      "kind": "postgres",
+      "tablePolicy": "manual",
+      "connectionConfigs": {
+        "host": "host.docker.internal",
+        "port": 5433,
+        "username": "cdc",
+        "password": "cdc",
+        "db": "cdcdemo"
+      }
+    }
+  }
+}

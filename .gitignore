@@ -1,0 +1,13 @@
+# nix build results
+/result
+/result-*
+
+# runtime state (postgres data, kafka logs, connect offsets)
+/.data/
+/.logs/
+
+# ShadowTraffic license (proprietary secrets)
+/license.env
+
+# docs kept local for now
+README.md
